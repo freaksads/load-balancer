@@ -61,10 +61,11 @@ async fn main() {
                         let address = {
                             let backends = backends.read().await;
 
-                            if (current == None) {
+                            if current == None {
                                 current = Some(i);
                             } else {
-                                if (backends[i].connections <= backends[current.unwrap()].connections) {
+                                if backends[i].connections <= backends[current.unwrap()].connections
+                                {
                                     current = Some(i);
                                 }
                             }
@@ -74,7 +75,7 @@ async fn main() {
 
                         if let Ok(mut backend) = TcpStream::connect(address).await {
                             {
-                                let backends = backends.write().await;
+                                let mut backends = backends.write().await;
                                 backends[current.unwrap()].connections += 1;
                             }
 
@@ -87,7 +88,7 @@ async fn main() {
                             client.write_all(&buffer[..n]).await.unwrap();
 
                             {
-                                let backends = backends.write().await;
+                                let mut backends = backends.write().await;
                                 backends[current.unwrap()].connections -= 1;
                             }
 
