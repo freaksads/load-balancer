@@ -10,6 +10,7 @@ use tokio::{
 struct Backend {
     address: &'static str,
     healthy: bool,
+    connections: usize,
 }
 
 #[tokio::main]
@@ -18,14 +19,17 @@ async fn main() {
         Backend {
             address: "127.0.0.1:8001",
             healthy: false,
+            connections: 0,
         },
         Backend {
             address: "127.0.0.1:8002",
             healthy: false,
+            connections: 0,
         },
         Backend {
             address: "127.0.0.1:8003",
             healthy: false,
+            connections: 0,
         },
     ]));
 
@@ -45,6 +49,7 @@ async fn main() {
 
             tokio::spawn(async move {
                 let len = backends.read().await.len();
+                let mut current: Option<usize> = None;
 
                 for i in 0..len {
                     let health = {
@@ -55,10 +60,24 @@ async fn main() {
                     if health {
                         let address = {
                             let backends = backends.read().await;
-                            backends[i].address
+
+                            if (current == None) {
+                                current = Some(i);
+                            } else {
+                                if (backends[i].connections <= backends[current.unwrap()].connections) {
+                                    current = Some(i);
+                                }
+                            }
+
+                            backends[current.unwrap()].address
                         };
 
                         if let Ok(mut backend) = TcpStream::connect(address).await {
+                            {
+                                let backends = backends.write().await;
+                                backends[current.unwrap()].connections += 1;
+                            }
+
                             let mut buffer = [0; 4096];
 
                             let n = client.read(&mut buffer).await.unwrap();
@@ -66,6 +85,11 @@ async fn main() {
 
                             let n = backend.read(&mut buffer).await.unwrap();
                             client.write_all(&buffer[..n]).await.unwrap();
+
+                            {
+                                let backends = backends.write().await;
+                                backends[current.unwrap()].connections -= 1;
+                            }
 
                             break;
                         }
